@@ -1,0 +1,70 @@
+---
+import '@fontsource/chakra-petch/400.css';
+import '@fontsource/chakra-petch/600.css';
+import '@fontsource/chakra-petch/700.css';
+import '@fontsource/jetbrains-mono/400.css';
+import '@fontsource/jetbrains-mono/700.css';
+import '../styles/global.css';
+
+interface Props {
+  titol: string;
+  hud?: boolean;
+}
+const { titol, hud = true } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+---
+<!doctype html>
+<html lang="ca">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Escape room de la sessió 2 del MP 1665 Digitalització aplicada als sectors productius: els entorns IT i OT." />
+    <link rel="icon" type="image/svg+xml" href={`${base}/favicon.svg`} />
+    <title>{titol} · Operació Pont</title>
+  </head>
+  <body>
+    <div class="fons" aria-hidden="true">
+      <div class="fons-graella"></div>
+      <div class="fons-llum"></div>
+    </div>
+
+    {hud && (
+      <header id="hud" class="hud">
+        <a class="hud-marca" href={`${base}/`} title="Torna al mapa de la xarxa">
+          <span class="logo">◆</span> OPERACIÓ <b>PONT</b>
+        </a>
+        <div class="hud-bloc">
+          <span class="hud-etiqueta">Agent</span>
+          <span class="hud-valor" data-hud="agent">—</span>
+        </div>
+        <div class="hud-bloc">
+          <span class="hud-etiqueta">XP</span>
+          <span class="hud-valor xp" data-hud="xp">0</span>
+        </div>
+        <div class="hud-bloc integritat">
+          <span class="hud-etiqueta">Integritat del sistema</span>
+          <span class="barra"><span class="barra-ple" data-hud="barra"></span></span>
+          <span class="hud-valor petit" data-hud="integritat">100%</span>
+        </div>
+        <div class="hud-bloc">
+          <span class="hud-etiqueta">Clau mestra</span>
+          <span class="fragments" data-hud="fragments"></span>
+        </div>
+        <button class="hud-so" type="button" data-hud="so" aria-pressed="true">♪ So</button>
+      </header>
+    )}
+
+    <main class="contingut">
+      <slot />
+    </main>
+
+    <footer class="peu">
+      MP 1665 · Digitalització aplicada als sectors productius · Sessió 2 · Els entorns IT i OT · Prat FP
+    </footer>
+
+    <script>
+      import { iniciaHud } from '../scripts/hud';
+      iniciaHud();
+    </script>
+  </body>
+</html>
