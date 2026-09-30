@@ -1,0 +1,224 @@
+---
+import Base from '../../layouts/Base.astro';
+import { SALES, type Sala } from '../../data/joc';
+
+export function getStaticPaths() {
+  return SALES.map((sala) => ({ params: { id: String(sala.id) }, props: { sala } }));
+}
+
+const { sala } = Astro.props as { sala: Sala };
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+---
+<Base titol={`${sala.codi} · ${sala.nom}`}>
+  <script type="application/json" id="dades-sala" set:html={JSON.stringify(sala)} />
+
+  <!-- Accés denegat (si el node anterior no està recuperat) -->
+  <section id="denegat" class="denegat" hidden>
+    <p class="sobretitol">{sala.codi}</p>
+    <h1 class="glitch vermell" data-text="ACCÉS DENEGAT">ACCÉS DENEGAT</h1>
+    <p>Aquest node encara està xifrat. Primer has de recuperar el node anterior.</p>
+    <a class="boto boto-principal" href={`${base}/`}>Torna al mapa</a>
+  </section>
+
+  <article id="sala" class="sala" hidden>
+    <header class="sala-cap">
+      <a class="enrere" href={`${base}/`}>◂ Mapa</a>
+      <p class="sobretitol">{sala.codi} · {sala.lloc}</p>
+      <h1><span class="sala-icona" aria-hidden="true">{sala.icona}</span> {sala.nom}</h1>
+      <ol class="passos" aria-label="Progrés del node">
+        <li data-pas="1" class="actiu">Transmissió</li>
+        <li data-pas="2">Desxifra</li>
+        <li data-pas="3">Pany</li>
+        <li data-pas="4">Fragment</li>
+      </ol>
+    </header>
+
+    <p id="repas" class="avis-repas" hidden>
+      Aquest node ja està recuperat. Pots repassar-lo i tornar a obrir els panys, però la puntuació desada no canviarà.
+    </p>
+
+    <div class="terminal">
+      <div class="terminal-barra"><span></span><span></span><span></span> unitat-pont://{sala.codi.toLowerCase().replace(' ', '-')}</div>
+      <div class="terminal-cos" id="transmissio"></div>
+      <button class="boto boto-fantasma salta" type="button" data-salta>Salta ▸▸</button>
+    </div>
+
+    <section id="bloc-teoria" class="bloc-teoria" hidden>
+      <h2>Informació interceptada</h2>
+      <p class="ajuda">Desxifra els {sala.teoria.length} arxius per poder accedir al pany. Llegeix-los bé: el pany en farà preguntes.</p>
+      <div class="arxius">
+        {sala.teoria.map((t, i) => (
+          <section class="arxiu xifrat" data-arxiu={i}>
+            <header>
+              <span class="arxiu-num">ARXIU {String(i + 1).padStart(2, '0')}</span>
+              <h3>{t.titol}</h3>
+            </header>
+            <div class="arxiu-cos" set:html={t.html} />
+            <button class="boto boto-desxifra" type="button">Desxifra l'arxiu</button>
+          </section>
+        ))}
+      </div>
+      <aside id="idea-clau" class="idea-clau" hidden>
+        <span class="idea-etiqueta">Idea clau</span>
+        <p>{sala.ideaClau}</p>
+      </aside>
+      <div class="centre">
+        <button id="ves-al-pany" class="boto boto-principal gran" type="button" hidden>Accedeix al pany ▸</button>
+      </div>
+    </section>
+
+    <section id="bloc-panys" class="bloc-panys" hidden>
+      <p id="compte-panys" class="compte-panys"></p>
+      <div id="pany"></div>
+    </section>
+
+    <section id="bloc-fragment" class="bloc-fragment" hidden>
+      <p class="sobretitol">Node recuperat</p>
+      <div class="fragment-gran" aria-live="polite">
+        <span class="fragment-pos">Posició {sala.fragment.posicio}</span>
+        <span class="fragment-lletra">{sala.fragment.lletra}</span>
+      </div>
+      <p class="missatge-final">{sala.missatgeFinal}</p>
+      <dl class="resum-node">
+        <div><dt>XP guanyats</dt><dd id="res-xp">0</dd></div>
+        <div><dt>Errors</dt><dd id="res-errors">0</dd></div>
+        <div><dt>Pistes</dt><dd id="res-pistes">0</dd></div>
+      </dl>
+      <p class="ajuda">Anota bé la lletra i la seva posició: al nucli hauràs de reconstruir la clau mestra.</p>
+      <div class="centre">
+        {sala.id < SALES.length
+          ? <a class="boto boto-principal gran" href={`${base}/sala/${sala.id + 1}/`}>Següent node ▸</a>
+          : <a class="boto boto-principal gran" href={`${base}/final/`}>Entra al nucli ▸</a>}
+        <a class="boto boto-fantasma" href={`${base}/`}>Torna al mapa</a>
+      </div>
+    </section>
+  </article>
+
+  <script>
+    import type { Sala } from '../../data/joc';
+    import { carrega, desa, perdIntegritat, salaDesbloquejada, xpPany } from '../../scripts/estat';
+    import { destacaHud, pintaHud } from '../../scripts/hud';
+    import { montaProva } from '../../scripts/proves';
+    import { so } from '../../scripts/so';
+    import { transmet } from '../../scripts/transmissio';
+
+    const sala = JSON.parse(document.getElementById('dades-sala')!.textContent!) as Sala;
+    const estat = carrega();
+    const $ = (id: string) => document.getElementById(id)!;
+
+    if (!estat.agent || !salaDesbloquejada(estat, sala.id)) {
+      $('denegat').hidden = false;
+    } else {
+      $('sala').hidden = false;
+      const repas = Boolean(estat.sales[sala.id]?.completada);
+      $('repas').hidden = !repas;
+      inicia(repas);
+    }
+
+    function marcaPas(n: number) {
+      document.querySelectorAll<HTMLElement>('.passos li').forEach((li) => {
+        const p = Number(li.dataset.pas);
+        li.classList.toggle('fet', p < n);
+        li.classList.toggle('actiu', p === n);
+      });
+    }
+
+    function inicia(repas: boolean) {
+      // Desxifrar arxius de teoria
+      const arxius = [...document.querySelectorAll<HTMLElement>('.arxiu')];
+      arxius.forEach((arxiu) => {
+        arxiu.querySelector('.boto-desxifra')!.addEventListener('click', (e) => {
+          const boto = e.currentTarget as HTMLButtonElement;
+          arxiu.classList.add('desxifrant');
+          boto.disabled = true;
+          if (!repas) so('clic');
+          setTimeout(() => {
+            arxiu.classList.remove('xifrat', 'desxifrant');
+            boto.remove();
+            if (arxius.every((a) => !a.classList.contains('xifrat'))) {
+              $('idea-clau').hidden = false;
+              $('ves-al-pany').hidden = false;
+              if (!repas) so('ok');
+            }
+          }, repas ? 0 : 650);
+        });
+      });
+
+      // Transmissió d'entrada (s'engega quan els arxius ja escolten els clics)
+      transmet($('transmissio'), sala.transmissio, () => {
+        marcaPas(2);
+        $('bloc-teoria').hidden = false;
+        if (repas) document.querySelectorAll<HTMLButtonElement>('.boto-desxifra').forEach((b) => b.click());
+      });
+
+      // Panys
+      let index = 0;
+      let errors = 0;
+      let pistes = 0;
+      let xp = 0;
+      let errorsPany = 0;
+      let pistesPany = 0;
+
+      $('ves-al-pany').addEventListener('click', () => {
+        so('clic');
+        marcaPas(3);
+        $('bloc-teoria').hidden = true;
+        $('bloc-panys').hidden = false;
+        seguent();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+
+      function seguent() {
+        const prova = sala.proves[index];
+        errorsPany = 0;
+        pistesPany = 0;
+        $('compte-panys').textContent =
+          sala.proves.length > 1 ? `Pany ${index + 1} de ${sala.proves.length}` : 'Pany únic del node';
+        montaProva($('pany'), prova, {
+          onError: () => {
+            errors += 1;
+            errorsPany += 1;
+            if (!repas) {
+              const e = carrega();
+              perdIntegritat(e);
+              pintaHud(e);
+              destacaHud('integritat');
+            }
+          },
+          onPista: () => {
+            pistes += 1;
+            pistesPany += 1;
+          },
+          onResolta: () => {
+            xp += xpPany(errorsPany, pistesPany);
+            index += 1;
+            if (index < sala.proves.length) {
+              seguent();
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            } else {
+              acaba();
+            }
+          },
+        });
+      }
+
+      function acaba() {
+        marcaPas(4);
+        $('bloc-panys').hidden = true;
+        $('bloc-fragment').hidden = false;
+        $('res-xp').textContent = repas ? '— (repàs)' : `+${xp}`;
+        $('res-errors').textContent = String(errors);
+        $('res-pistes').textContent = String(pistes);
+        if (!repas) {
+          const e = carrega();
+          e.sales[sala.id] = { completada: true, xp, errors, pistes };
+          desa(e);
+          pintaHud(e);
+          destacaHud('xp');
+        }
+        so('victoria');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }
+  </script>
+</Base>
